@@ -1,112 +1,95 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import './MovieApp.css';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { AiOutlineSearch } from 'react-icons/ai';
+import './MovieApp.css';
 
-const API_URL = process.env.REACT_APP_OMDB_API_URL;
-const API_KEY = process.env.REACT_APP_OMDB_API_KEY;
+const API_KEY = process.env.REACT_APP_TMDB_API_KEY;
+const BASE_URL = 'https://api.themoviedb.org/3';
 
 function MovieApp() {
   const [movies, setMovies] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [sortBy, setSortBy] = useState('popularity.desc');
+  const [genres, setGenres] = useState([]);
   const [selectedGenre, setSelectedGenre] = useState('');
-  const [sortBy, setSortBy] = useState('title.asc');
-  const [genres] = useState([
-    { id: 'action', name: 'Action' },
-    { id: 'comedy', name: 'Comedy' },
-    { id: 'drama', name: 'Drama' },
-    { id: 'horror', name: 'Horror' },
-  ]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-
-  const fetchMovies = useCallback(async () => {
-    if (!searchQuery) return;
-
-    setLoading(true);
-    setError('');
-
-    try {
-      const { data } = await axios.get(API_URL, {
-        params: { apikey: API_KEY, s: searchQuery },
-      });
-
-      if (data.Response === 'False') {
-        setMovies([]);
-        setError(data.Error);
-        return;
-      }
-
-      let movieResults = data.Search || [];
-
-      const detailedMovies = await Promise.all(
-        movieResults.map(async (movie) => {
-          const detailsResponse = await axios.get(API_URL, {
-            params: { apikey: API_KEY, i: movie.imdbID },
-          });
-
-          return {
-            ...movie,
-            rating: detailsResponse.data.imdbRating || 'N/A',
-            plot: detailsResponse.data.Plot || 'No description available.',
-          };
-        })
-      );
-
-      const sortedMovies = [...detailedMovies].sort((a, b) => {
-        switch (sortBy) {
-          case 'title.asc':
-            return a.Title.localeCompare(b.Title);
-          case 'title.desc':
-            return b.Title.localeCompare(a.Title);
-          case 'year.asc':
-            return parseInt(a.Year) - parseInt(b.Year);
-          case 'year.desc':
-            return parseInt(b.Year) - parseInt(a.Year);
-          default:
-            return 0;
-        }
-      });
-
-      setMovies(sortedMovies);
-    } catch (err) {
-      setError('Failed to fetch movies. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  }, [searchQuery, sortBy]);
+  const [expandedMovieId, setExpandedMovieId] = useState(null);
 
   useEffect(() => {
+    const fetchGenres = async () => {
+      const response = await axios.get(`${BASE_URL}/genre/movie/list`, {
+        params: { api_key: API_KEY },
+      });
+      setGenres(response.data.genres);
+    };
+    fetchGenres();
+  }, []);
+
+  useEffect(() => {
+    const fetchMovies = async () => {
+      const response = await axios.get(`${BASE_URL}/discover/movie`, {
+        params: {
+          api_key: API_KEY,
+          sort_by: sortBy,
+          with_genres: selectedGenre,
+          query: searchQuery,
+        },
+      });
+      setMovies(response.data.results);
+    };
     fetchMovies();
-  }, [fetchMovies]);
+  }, [searchQuery, sortBy, selectedGenre]);
+
+  const handleSearchChange = (event) => {
+    setSearchQuery(event.target.value);
+  };
+
+  const handleSortChange = (event) => {
+    setSortBy(event.target.value);
+  };
+
+  const handleGenreChange = (event) => {
+    setSelectedGenre(event.target.value);
+  };
+
+  const handleSearchSubmit = async () => {
+    const response = await axios.get(`${BASE_URL}/search/movie`, {
+      params: { api_key: API_KEY, query: searchQuery },
+    });
+    setMovies(response.data.results);
+  };
+
+  const toggleDescription = (movieId) => {
+    setExpandedMovieId(expandedMovieId === movieId ? null : movieId);
+  };
 
   return (
     <div>
       <h1>MovieHub</h1>
-      <div className='search-bar'>
+      <div className="search-bar">
         <input
-          type='text'
-          placeholder='Enter Movie Name'
+          type="text"
+          placeholder="Search movies..."
           value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
+          onChange={handleSearchChange}
           className='search-input'
         />
-        <button onClick={fetchMovies} className='search-button'>
-          <i className="bi bi-search"></i>
+        <button onClick={handleSearchSubmit} className="search-button">
+          <AiOutlineSearch />
         </button>
       </div>
-
-      <div className='filters'>
-        <label htmlFor='sort-by'>Sort By:</label>
-        <select id='sort-by' value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
-          <option value='title.asc'>Title (A-Z)</option>
-          <option value='title.desc'>Title (Z-A)</option>
-          <option value='year.asc'>Year (Oldest First)</option>
-          <option value='year.desc'>Year (Newest First)</option>
+      <div className="filters">
+        <label htmlFor="sort-by">Sort By:</label>
+        <select id="sort-by" value={sortBy} onChange={handleSortChange}>
+          <option value="popularity.desc">Popularity Descending</option>
+          <option value="popularity.asc">Popularity Ascending</option>
+          <option value="vote_average.desc">Rating Descending</option>
+          <option value="vote_average.asc">Rating Ascending</option>
+          <option value="release_date.desc">Release Date Descending</option>
+          <option value="release_date.asc">Release Date Ascending</option>
         </select>
-
-        <label htmlFor='genre'>Genre</label>
-        <select id='genre' value={selectedGenre} onChange={(e) => setSelectedGenre(e.target.value)}>
-          <option value=''>All Genres</option>
+        <label htmlFor="genre">Genre:</label>
+        <select id="genre" value={selectedGenre} onChange={handleGenreChange}>
+          <option value="">All Genres</option>
           {genres.map((genre) => (
             <option key={genre.id} value={genre.id}>
               {genre.name}
@@ -114,24 +97,22 @@ function MovieApp() {
           ))}
         </select>
       </div>
-
-      {loading && <p>Loading...</p>}
-      {error && <p className="error">{error}</p>}
-
-      <div className="movie-list">
-        {movies.length > 0 ? (
-          movies.map((movie) => (
-            <div key={movie.imdbID} className="movie-card">
-              <img src={movie.Poster} alt={movie.Title} />
-              <h3>{movie.Title}</h3>
-              <p><strong>Year:</strong> {movie.Year}</p>
-              <p><strong>Rating:</strong> ⭐ {movie.rating}</p>
-              <p className="movie-plot"><strong>About:</strong> {movie.plot}</p>
-            </div>
-          ))
-        ) : (
-          !loading && <p>No movies found</p>
-        )}
+      <div className="movie-wrapper">
+        {movies.map((movie) => (
+          <div key={movie.id} className="movie">
+            <img src={`https://image.tmdb.org/t/p/w500${movie.poster_path}`} alt={movie.title} />
+            <h2>{movie.title}</h2>
+            <p className='rating'>Rating: {movie.vote_average}</p>
+            {expandedMovieId === movie.id ? (
+              <p>{movie.overview}</p>
+            ) : (
+              <p>{movie.overview.substring(0, 150)}...</p>
+            )}
+            <button onClick={() => toggleDescription(movie.id)} className='read-more'>
+              {expandedMovieId === movie.id ? 'Show Less' : 'Read More'}
+            </button>
+          </div>
+        ))}
       </div>
     </div>
   );
